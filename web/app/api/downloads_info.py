@@ -318,13 +318,17 @@ def download_status(body: DownloadStatus):
     )
 
     if computer:
-        computer.last_time_online = CFG.offset_to_est(datetime.datetime.utcnow(), True)
+        now_est = CFG.offset_to_est(datetime.datetime.utcnow(), True)
+        computer.last_time_online = now_est
         computer.download_status = body.download_status
         if body.last_downloaded:
             computer.last_downloaded = body.last_downloaded
 
         if body.last_saved_path:
             computer.last_saved_path = body.last_saved_path
+
+        if body.download_status == "downloaded":
+            computer.last_download_time = now_est
 
         computer.update()
 
@@ -333,6 +337,14 @@ def download_status(body: DownloadStatus):
             computer.computer_name,
             computer.download_status,
         )
+
+        if computer.logs_enabled and body.download_status == "downloaded":
+            utc_download_time = now_est.replace(
+                tzinfo=zoneinfo.ZoneInfo("America/New_York")
+            ).astimezone(zoneinfo.ZoneInfo("UTC"))
+            backup_log_on_download_success(
+                computer, utc_download_time.replace(tzinfo=None)
+            )
 
         if (
             computer.logs_enabled

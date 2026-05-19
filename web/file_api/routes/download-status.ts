@@ -66,12 +66,17 @@ export const downloadStatus = async (req: Request) => {
   const updateData: {
     lastTimeOnline: string;
     downloadStatus: string;
+    lastDownloadTime?: string;
     lastDownloaded?: string;
     lastSavedPath?: string;
   } = {
     lastTimeOnline: now,
     downloadStatus: body.download_status,
   };
+
+  if (body.download_status === "downloaded") {
+    updateData.lastDownloadTime = now;
+  }
 
   if (body.last_downloaded) {
     updateData.lastDownloaded = body.last_downloaded;
@@ -86,6 +91,29 @@ export const downloadStatus = async (req: Request) => {
     .update(computers)
     .set(updateData)
     .where(eq(computers.id, computer.id));
+
+  if (body.download_status === "downloaded" && body.identifier_key) {
+    const flaskBase =
+      process.env.FLASK_INTERNAL_URL?.replace(/\/$/, "") || "http://app:5000";
+    try {
+      const syncRes = await fetch(`${flaskBase}/sync_backup_log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier_key: body.identifier_key }),
+      });
+      if (!syncRes.ok) {
+        logger.warn(
+          { computer: computer.computerName, status: syncRes.status },
+          "Backup log sync failed after download_status"
+        );
+      }
+    } catch (syncErr) {
+      logger.warn(
+        { err: syncErr, computer: computer.computerName },
+        "Backup log sync request failed after download_status"
+      );
+    }
+  }
 
   logger.info(
     {
