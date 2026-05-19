@@ -19,6 +19,8 @@ services:
   app:
     restart: unless-stopped
     build: .
+    env_file:
+      - .env
     environment:
       - FLASK_ENV=production
       - FLASK_APP=wsgi:app
@@ -28,6 +30,7 @@ services:
     entrypoint: "bash start_server.sh"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/DigiCert:/etc/DigiCert:ro
     depends_on:
       - db
 
@@ -55,6 +58,8 @@ services:
     container_name: "celery_worker"
     restart: unless-stopped
     build: .
+    env_file:
+      - .env
     environment:
       - REDIS_PORT=${REDIS_PORT}
       - REDIS_PASSWORD=${REDIS_PASSWORD}
@@ -68,6 +73,7 @@ services:
       - db
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/DigiCert:/etc/DigiCert:ro
     command: >
       celery -A worker worker -B -S redbeat.RedBeatScheduler --loglevel=INFO
 
@@ -90,6 +96,8 @@ services:
       - db
     ports:
       - "127.0.0.1:${FILE_API_PORT:-33000}:3000"
+    env_file:
+      - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
       TZ: America/New_York
@@ -97,6 +105,7 @@ services:
       USE_PRETTY_LOGS: "false"
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt
+      - /etc/DigiCert:/etc/DigiCert:ro
     healthcheck:
       test:
         [
