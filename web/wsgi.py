@@ -46,6 +46,30 @@ def get_pcc_access_key():
 
 
 @app.cli.command()
+def repair_backup_logs():
+    """Fix backup period logs for computers with recent downloads (after file_api-only updates)."""
+    from datetime import timedelta
+
+    from app.controllers import sync_backup_log_for_computer
+    from app.models import Computer
+    from config import BaseConfig as CFG
+
+    current_east_time = CFG.offset_to_est(datetime.utcnow(), True)
+    cutoff = current_east_time - timedelta(hours=1, minutes=30)
+    computers = Computer.query.filter(
+        Computer.activated.is_(True),
+        Computer.logs_enabled.is_(True),
+        Computer.last_download_time.is_not(None),
+        Computer.last_download_time >= cutoff,
+    ).all()
+
+    print(f"Repairing backup logs for {len(computers)} computers with recent downloads...")
+    for computer in computers:
+        sync_backup_log_for_computer(computer)
+    print("Done.")
+
+
+@app.cli.command()
 def list_online_devices():
     """List all activated computers that are currently online."""
     from app.models import Computer

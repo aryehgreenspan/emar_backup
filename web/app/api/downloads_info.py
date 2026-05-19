@@ -9,7 +9,10 @@ from app.controllers import (
     backup_log_on_download_success,
     create_log_event,
 )
-from app.controllers.backup_log import backup_log_on_download_error_with_message
+from app.controllers.backup_log import (
+    backup_log_on_download_error_with_message,
+    sync_backup_log_for_computer,
+)
 from app.logger import logger
 from app.models import Computer, DesktopClient, LogType
 from app.models.computer import PrinterStatus
@@ -20,6 +23,7 @@ from app.schema import (
     GetCredentials,
     LastTime,
 )
+from app.schema.backup_log_sync import BackupLogSyncRequest
 from app.schema.printer_info import PrinterInfo
 from app.views.blueprint import BlueprintApi
 from config import BaseConfig as CFG
@@ -176,6 +180,21 @@ def last_time(body: LastTime):
         message,
     )
     return jsonify(status="fail", message=message, rmcreds="rmcreds"), 400
+
+
+@downloads_info_blueprint.post("/sync_backup_log")
+@logger.catch
+def sync_backup_log(body: BackupLogSyncRequest):
+    """Called by file_api after a successful backup timestamp update."""
+    computer: Computer | None = Computer.query.filter_by(
+        identifier_key=body.identifier_key
+    ).first()
+
+    if not computer:
+        return jsonify(status="fail", message="Computer not found"), 404
+
+    sync_backup_log_for_computer(computer)
+    return jsonify(status="success"), 200
 
 
 @downloads_info_blueprint.post("/get_credentials")

@@ -114,6 +114,30 @@ export const lastTime = async (req: Request) => {
     );
   }
 
+  // Flask updates backup period logs (chart/history); file_api only updates timestamps
+  if (body.last_download_time && body.identifier_key) {
+    const flaskBase =
+      process.env.FLASK_INTERNAL_URL?.replace(/\/$/, "") || "http://app:5000";
+    try {
+      const syncRes = await fetch(`${flaskBase}/sync_backup_log`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ identifier_key: body.identifier_key }),
+      });
+      if (!syncRes.ok) {
+        logger.warn(
+          { computer: computer.computerName, status: syncRes.status },
+          "Backup log sync failed"
+        );
+      }
+    } catch (syncErr) {
+      logger.warn(
+        { err: syncErr, computer: computer.computerName },
+        "Backup log sync request failed"
+      );
+    }
+  }
+
   // Get MSI version - optimized to avoid loading blob
   const msi = await (async () => {
     if (computer.msiVersion === "stable" || computer.msiVersion === "latest") {

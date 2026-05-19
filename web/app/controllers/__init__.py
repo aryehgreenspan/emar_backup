@@ -30,6 +30,7 @@ from .backup_log import (
     backup_log_on_request_to_view,
     backup_log_on_download_error,
     backup_log_on_download_error_with_message,
+    sync_backup_log_for_computer,
 )
 from .pagination import create_pagination
 from .system_log import create_system_log

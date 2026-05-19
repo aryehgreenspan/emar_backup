@@ -100,6 +100,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      FLASK_INTERNAL_URL: http://app:5000
       TZ: America/New_York
       NODE_ENV: production
       USE_PRETTY_LOGS: "false"

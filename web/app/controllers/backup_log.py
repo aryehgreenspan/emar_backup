@@ -1,14 +1,48 @@
 import enum
 import random
+import zoneinfo
 from datetime import datetime, timedelta
 
 from app import models as m
 from app.logger import logger
+from config import BaseConfig as CFG
 
 
 class BackupLogError(enum.Enum):
     ONE_HOUR = "Longer than 1 hour without a backup"
     TWO_HOURS = "Longer than 2 hours without a backup"
+
+
+def _cap_stale_offline_log_start(
+    offline_log: m.BackupLog, rounded_current_time: datetime
+) -> None:
+    """Avoid multi-month offline rows when closing a stale NO_DOWNLOADS_PERIOD log."""
+    max_offline_span = timedelta(days=1)
+    if rounded_current_time - offline_log.start_time > max_offline_span:
+        offline_log.start_time = rounded_current_time - max_offline_span
+
+
+def sync_backup_log_for_computer(computer: m.Computer) -> None:
+    """Update backup period logs to match live computer timestamps."""
+    if not computer.logs_enabled:
+        return
+
+    current_east_time = CFG.offset_to_est(datetime.utcnow(), True)
+    if (
+        computer.last_download_time
+        and computer.last_download_time
+        >= current_east_time - timedelta(hours=1, minutes=30)
+    ):
+        utc_download_time = (
+            computer.last_download_time.replace(
+                tzinfo=zoneinfo.ZoneInfo("America/New_York")
+            )
+            .astimezone(zoneinfo.ZoneInfo("UTC"))
+            .replace(tzinfo=None)
+        )
+        backup_log_on_download_success(computer, utc_download_time)
+    else:
+        backup_log_on_request_to_view(computer)
 
 
 def backup_log_on_download_success(
@@ -192,6 +226,9 @@ def backup_log_on_download_success(
 
             if computer.last_time_logs_enabled <= last_computer_log.end_time:
                 if last_computer_log.start_time < rounded_current_time:
+                    _cap_stale_offline_log_start(
+                        last_computer_log, rounded_current_time
+                    )
                     last_computer_log.end_time = rounded_current_time - timedelta(
                         seconds=1
                     )

@@ -5,7 +5,7 @@ from flask_login import current_user, login_required
 
 from app import db
 from app import models as m
-from app.controllers import backup_log_on_request_to_view, create_pagination
+from app.controllers import create_pagination, sync_backup_log_for_computer
 from config import BaseConfig as CFG
 
 from .utils import has_access_to_company, has_access_to_computer, has_access_to_location
@@ -43,9 +43,8 @@ def computer_info(computer_id):
     if not has_access_to_computer(current_user, computer):
         abort(403, "You don't have access to this computer information.")
 
-    # Update the last computer log information
-    if computer.logs_enabled:
-        backup_log_on_request_to_view(computer)
+    # Align backup period logs with live status (do not extend stale offline rows)
+    sync_backup_log_for_computer(computer)
 
     # Paginated logs for table
     computer_logs_query = m.BackupLog.query.filter(
@@ -96,6 +95,22 @@ def computer_info(computer_id):
         .order_by(m.BackupLog.start_time.asc())
         .all()
     )
+
+    # Stale multi-day offline rows make the chart all-red while the device is online
+    current_east_time = CFG.offset_to_est(datetime.utcnow(), True)
+    if (
+        computer.last_download_time
+        and computer.last_download_time
+        >= current_east_time - timedelta(hours=1, minutes=30)
+    ):
+        logs_for_chart = [
+            log
+            for log in logs_for_chart
+            if not (
+                log.error
+                and (log.est_end_time - log.est_start_time) > timedelta(days=1)
+            )
+        ]
 
     # List objects with different data for chart.
     labels = []
