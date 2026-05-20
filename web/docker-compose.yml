@@ -33,11 +33,6 @@ services:
       - /etc/DigiCert:/etc/DigiCert:ro
     depends_on:
       - db
-    networks:
-      default:
-        aliases:
-          # Flask SERVER_NAME host matching; file_api calls http://app.emarvault.com:5000
-          - app.emarvault.com
 
   backup:
     image: simple2b/pg-backup:1.0
@@ -105,7 +100,7 @@ services:
       - .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      FLASK_INTERNAL_URL: http://app.emarvault.com:5000
+      FLASK_INTERNAL_URL: http://app:5000
       TZ: America/New_York
       NODE_ENV: production
       USE_PRETTY_LOGS: "false"
