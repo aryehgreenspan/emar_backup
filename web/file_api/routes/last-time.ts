@@ -5,6 +5,7 @@ import { computers, desktopClients, clientVersions } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../utils/logger";
 import { getCurrentTimestamp } from "../utils/timestamp";
+import { flaskInternalPost } from "../utils/flask-internal";
 
 export const lastTime = async (req: Request) => {
   const bodyRaw = await req.json();
@@ -116,13 +117,9 @@ export const lastTime = async (req: Request) => {
 
   // Flask updates backup period logs (chart/history); file_api only updates timestamps
   if (body.last_download_time && body.identifier_key) {
-    const flaskBase =
-      process.env.FLASK_INTERNAL_URL?.replace(/\/$/, "") || "http://app:5000";
     try {
-      const syncRes = await fetch(`${flaskBase}/sync_backup_log`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier_key: body.identifier_key }),
+      const syncRes = await flaskInternalPost("/sync_backup_log", {
+        identifier_key: body.identifier_key,
       });
       if (!syncRes.ok) {
         logger.warn(

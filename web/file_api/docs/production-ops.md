@@ -59,3 +59,39 @@ Adjust port if `FILE_API_PORT` is not 33000.
 | `USE_PRETTY_LOGS` | No | Set `false` in production (default when `NODE_ENV=production`) |
 | `NODE_ENV` | No | `production` in docker-compose |
 | `FILE_API_PORT` | No | Host port mapping, default 33000 |
+| `FLASK_INTERNAL_URL` | No | Default `http://app.emarvault.com:5000` — hostname must match Flask `SERVER_NAME` in `.env` |
+
+## Flask internal API (backup log sync)
+
+`file_api` calls Flask `POST /sync_backup_log` after successful downloads. Production sets `SERVER_NAME=app.emarvault.com`, so Werkzeug **rejects** requests whose `Host` is `127.0.0.1` or `app` (404 HTML admin page even when `flask routes` lists the endpoint).
+
+**Verify from the app container** (use the same host as `SERVER_NAME` in `.env`):
+
+```bash
+docker compose exec app python -c "
+import os, requests
+host = os.environ.get('SERVER_NAME', 'app.emarvault.com').split(':')[0]
+r = requests.post(
+    'http://127.0.0.1:5000/sync_backup_log',
+    json={'identifier_key': 'YOUR-UUID-HERE'},
+    headers={'Host': host},
+)
+print(r.status_code, r.text[:120])
+"
+```
+
+Expect **200** and `{\"status\":\"success\"}`.
+
+After deploy, from `file_api`:
+
+```bash
+docker compose exec file_api bun -e "
+fetch('http://app.emarvault.com:5000/sync_backup_log', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ identifier_key: 'YOUR-UUID-HERE' }),
+}).then(r => r.text().then(t => console.log(r.status, t.slice(0, 120))))
+"
+```
+
+Then run `docker compose exec app flask repair-backup-logs` and `flask update-cl-stat`.

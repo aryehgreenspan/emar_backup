@@ -5,6 +5,7 @@ import { computers } from "../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { logger } from "../utils/logger";
 import { getCurrentTimestamp } from "../utils/timestamp";
+import { flaskInternalPost } from "../utils/flask-internal";
 
 export const downloadStatus = async (req: Request) => {
   let body;
@@ -93,13 +94,9 @@ export const downloadStatus = async (req: Request) => {
     .where(eq(computers.id, computer.id));
 
   if (body.download_status === "downloaded" && body.identifier_key) {
-    const flaskBase =
-      process.env.FLASK_INTERNAL_URL?.replace(/\/$/, "") || "http://app:5000";
     try {
-      const syncRes = await fetch(`${flaskBase}/sync_backup_log`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ identifier_key: body.identifier_key }),
+      const syncRes = await flaskInternalPost("/sync_backup_log", {
+        identifier_key: body.identifier_key,
       });
       if (!syncRes.ok) {
         logger.warn(
