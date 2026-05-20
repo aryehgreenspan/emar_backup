@@ -1,14 +1,24 @@
 import { db } from "../database/db";
-import {
-  computers,
-  downloadBackupCalls,
-  pccAccessTokens,
-} from "../drizzle/schema";
+import { computers, downloadBackupCalls } from "../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { PCCDownloadSchema } from "../validation_schemas/pcc";
-import { getPcc2LeggedToken } from "../utils/get-pcc-2-legged-token";
+import {
+  getPcc2LeggedToken,
+  invalidatePccAccessToken,
+} from "../utils/get-pcc-2-legged-token";
 import { executePccRequest } from "../utils/execute-pcc-request";
 import { logger } from "../utils/logger";
+
+const ERROR_BODY_LOG_MAX = 500;
+
+async function pccErrorBodySnippet(response: Response): Promise<string | undefined> {
+  const snippet = await response
+    .clone()
+    .text()
+    .then((t) => t.slice(0, ERROR_BODY_LOG_MAX))
+    .catch(() => "");
+  return snippet || undefined;
+}
 
 export const downloadFromPCC = async (req: Bun.BunRequest) => {
   const bodyRaw = await req.json();
@@ -93,10 +103,7 @@ export const downloadFromPCC = async (req: Bun.BunRequest) => {
       "Got 401 from PCC, deleting old token and retrying with new one (attempt 1/1)"
     );
 
-    // Delete old token from database
-    await db.delete(pccAccessTokens);
-
-    // Get new token
+    await invalidatePccAccessToken();
     const newToken = await getPcc2LeggedToken();
 
     // Retry request with new token (only once)
@@ -115,7 +122,11 @@ export const downloadFromPCC = async (req: Bun.BunRequest) => {
   }
   if (!res.ok) {
     logger.error(
-      { computerId: computer.id, status: res.status },
+      {
+        computerId: computer.id,
+        status: res.status,
+        body: await pccErrorBodySnippet(res),
+      },
       "Error downloading backup from PCC for computer"
     );
     return new Response(`Error downloading backup from PCC`, {

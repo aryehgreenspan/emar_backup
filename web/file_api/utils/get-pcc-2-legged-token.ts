@@ -4,6 +4,12 @@ import { eq } from "drizzle-orm";
 import { logger } from "./logger";
 import { getCurrentTimestamp } from "./timestamp";
 
+/** Drop cached token so the next getPcc2LeggedToken() fetches a fresh one from PCC. */
+export const invalidatePccAccessToken = async (): Promise<void> => {
+  await db.delete(pccAccessTokens);
+  logger.info("Invalidated stored PCC access token");
+};
+
 export const getPcc2LeggedToken = async (): Promise<string> => {
   const token = await db.query.pccAccessTokens.findFirst();
 

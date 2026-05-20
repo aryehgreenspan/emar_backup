@@ -84,3 +84,20 @@ fetch('http://app:5000/sync_backup_log', {
 Expect **200** and `{\"status\":\"success\"}`.
 
 Then run `docker compose exec app flask repair-backup-logs` and `flask update-cl-stat`.
+
+## PCC backup failures (`downloadFromPCC`)
+
+Nginx sends `POST /pcc_api/download_backup` to `file_api` `/download_from_pcc`.
+
+| Log | Meaning |
+|-----|---------|
+| `PCC request returned error status` + `401` | Stale token; `file_api` deletes the cached token and retries once automatically |
+| `PCC response after retry` still `401` | PCC credentials/certs or app not authorized |
+| status `500` on PCC response | PointClickCare backup-files API error (vendor); check PCC status |
+| `PCC request failed (network or TLS)` | Certs missing or wrong path in `file_api` container |
+
+Manual token reset (if many agents fail at once with 401):
+
+```bash
+docker compose exec db psql -U postgres -d db -c "DELETE FROM pcc_access_tokens;"
+```

@@ -1,13 +1,40 @@
 import type { HeadersInit } from "bun";
 import { checkDailyRequestsCount } from "./check-daily-requests-count";
+import { logger } from "./logger";
 
+const ERROR_BODY_LOG_MAX = 500;
+
+async function logPccErrorResponse(
+  response: Response,
+  url: string,
+): Promise<void> {
+  const snippet = await response
+    .clone()
+    .text()
+    .then((t) => t.slice(0, ERROR_BODY_LOG_MAX))
+    .catch(() => "");
+
+  logger.warn(
+    {
+      status: response.status,
+      statusText: response.statusText,
+      url,
+      body: snippet || undefined,
+    },
+    "PCC request returned error status",
+  );
+}
+
+/**
+ * Call PCC with mTLS. Returns the real Response (including 401/4xx/5xx) so callers
+ * can retry on 401. Network/TLS failures return 502.
+ */
 export const executePccRequest = async (
   url: string,
   headers: HeadersInit,
   method: string = "GET",
-  body?: any
-) => {
-  // Check daily requests count and raise error if it's exceeded
+  body?: unknown,
+): Promise<Response> => {
   const checkResult = await checkDailyRequestsCount();
   if (checkResult instanceof Response) {
     return checkResult;
@@ -17,8 +44,7 @@ export const executePccRequest = async (
     const response = await fetch(url, {
       method,
       headers,
-      body: JSON.stringify(body),
-      // Bun-specific TLS configuration for client certificates
+      body: body !== undefined ? JSON.stringify(body) : undefined,
       tls: {
         cert: await Bun.file(process.env.CERTIFICATE_PATH!).text(),
         key: await Bun.file(process.env.PRIVATEKEY_PATH!).text(),
@@ -26,15 +52,18 @@ export const executePccRequest = async (
     });
 
     if (!response.ok) {
-      console.error(
-        `Failed to execute PCC request. Status: ${response.status}, StatusText: ${response.statusText}`
-      );
-      throw new Error(`PCC request failed with status ${response.status}`);
+      await logPccErrorResponse(response, url);
     }
 
     return response;
   } catch (error) {
-    console.error("Error executing PCC request:", error);
-    return new Response("Error executing PCC request", { status: 500 });
+    logger.error({ err: error, url }, "PCC request failed (network or TLS)");
+    return new Response(
+      JSON.stringify({ error: "Error executing PCC request" }),
+      {
+        status: 502,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 };
